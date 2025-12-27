@@ -4,7 +4,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "download": "bun src/download.ts"
+    "download": "tsx src/download.ts"
   },
   "dependencies": {
     "adm-zip": "^0.5.12",
@@ -12,6 +12,8 @@
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
-    "bun-types": "^1.3.5"
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }

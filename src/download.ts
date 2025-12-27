@@ -7,16 +7,23 @@ const USER_DATA_DIR = path.join(process.cwd(), '.user_data');
 
 async function main() {
   const args = process.argv.slice(2);
-  const waitLogin = args.includes('--wait-login');
-  const cleanArgs = args.filter(arg => arg !== '--wait-login');
 
-  if (cleanArgs.length < 2) {
-    console.error('Usage: bun run download <url1> [url2 ... url10] <output_dir> [--wait-login]');
+  if (args.includes('--login')) {
+    if (args.length > 1) {
+      console.error('Error: --login option cannot be used with other arguments.');
+      process.exit(1);
+    }
+    await handleLoginMode();
+    return;
+  }
+
+  if (args.length < 2) {
+    console.error('Usage: npm run download <url1> [url2 ... url10] <output_dir> [--login]');
     process.exit(1);
   }
 
-  const outputDir = cleanArgs.pop()!;
-  const targetUrls = cleanArgs;
+  const outputDir = args.pop()!;
+  const targetUrls = args;
 
   if (targetUrls.length > 10) {
     console.error('Error: Maximum 10 URLs allowed.');
@@ -32,7 +39,7 @@ async function main() {
   console.log(`User Data Dir: ${USER_DATA_DIR}`);
 
   const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
-    headless: false, // Start non-headless for manual login if needed
+    headless: false,
     acceptDownloads: true,
     args: ['--start-maximized'],
     viewport: null,
@@ -40,35 +47,22 @@ async function main() {
 
   try {
     // --- Login Check Phase ---
-    // We use the first URL (or a generic one) to check for login status.
-    // This ensures we are logged in before starting parallel downloads.
     const firstPage = context.pages()[0] || await context.newPage();
-    const checkUrl = targetUrls[0]; // Use the first URL for login check
+    const checkUrl = targetUrls[0];
 
     console.log(`Checking login status with ${checkUrl}...`);
     await firstPage.goto(checkUrl, { waitUntil: 'domcontentloaded' });
 
-    if (waitLogin) {
-      console.log('Waiting for login... Please log in manually in the browser.');
-      console.log('Press Enter in this terminal when you are ready to proceed...');
-      await new Promise(resolve => process.stdin.once('data', resolve));
+    // Check for login redirection
+    if (firstPage.url().includes('accounts.google.com') || firstPage.url().includes('ServiceLogin')) {
+      console.log('Login required. Please log in manually in the browser window.');
+      console.log('Waiting for navigation to Google Drive/Docs...');
       
-      // After manual login, we might need to reload or just proceed.
-      // The parallel tasks will handle their own navigation.
-    } else {
-      // Check for login redirection
-      if (firstPage.url().includes('accounts.google.com') || firstPage.url().includes('ServiceLogin')) {
-        console.log('Login required. Please log in manually in the browser window.');
-        console.log('Waiting for navigation to Google Drive/Docs...');
-        
-        // Wait until we are redirected back to a google drive/docs domain
-        await firstPage.waitForURL(/.*(drive|docs)\.google\.com.*/, { timeout: 0 });
-        console.log('Login detected. Proceeding...');
-      }
+      // Wait until we are redirected back to a google drive/docs domain
+      await firstPage.waitForURL(/.*(drive|docs)\.google\.com.*/, { timeout: 0 });
+      console.log('Login detected. Proceeding...');
     }
     
-    // Close the check page if it's not needed, or just leave it.
-    // We will create new pages for each task to ensure isolation and parallelism.
     await firstPage.close();
 
     // --- Parallel Download Phase ---
@@ -81,6 +75,30 @@ async function main() {
 
   } catch (error) {
     console.error('An error occurred during execution:', error);
+  } finally {
+    console.log('Closing browser...');
+    await context.close();
+  }
+}
+
+async function handleLoginMode() {
+  console.log(`Launching browser for login...`);
+  console.log(`User Data Dir: ${USER_DATA_DIR}`);
+
+  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+    headless: false,
+    acceptDownloads: true,
+    args: ['--start-maximized'],
+    viewport: null,
+  });
+
+  try {
+    const page = context.pages()[0] || await context.newPage();
+    await page.goto('https://drive.google.com', { waitUntil: 'domcontentloaded' });
+
+    console.log('Waiting for login... Please log in manually in the browser.');
+    console.log('Press Enter in this terminal when you are ready to close...');
+    await new Promise(resolve => process.stdin.once('data', resolve));
   } finally {
     console.log('Closing browser...');
     await context.close();
