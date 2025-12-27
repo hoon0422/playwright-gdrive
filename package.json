@@ -4,7 +4,11 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "download": "tsx src/download.ts"
+    "download": "tsx src/download.ts",
+    "build": "tsc -b"
+  },
+  "bin": {
+    "playwright-gdrive": "dist/download.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.12",
