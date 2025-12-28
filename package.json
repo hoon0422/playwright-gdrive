@@ -5,6 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "download": "tsx src/download.ts",
+    "login": "tsx src/login.ts",
     "build": "tsc -b"
   },
   "bin": {

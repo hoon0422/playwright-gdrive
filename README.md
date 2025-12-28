@@ -40,6 +40,23 @@ npm run download "https://drive.google.com/drive/folders/..." ./downloads --user
 브라우저에서 수동으로 로그인을 완료하면, 스크립트가 이를 감지하고 자동으로 다운로드를 진행하거나 종료됩니다.
 로그인 세션은 `--user-data-dir`에 저장되므로, 다음 실행부터는 로그인 상태가 유지됩니다.
 
+## 사전 로그인 (Pre-login)
+
+대량의 다운로드를 수행하기 전에 미리 로그인을 해두고 싶다면 `login` 스크립트를 사용할 수 있습니다.
+
+```bash
+npm run login <user_data_dir>
+```
+
+예시:
+
+```bash
+npm run login ./my-session
+```
+
+이 명령어를 실행하면 브라우저가 열리고 Google 로그인 페이지로 이동합니다. 로그인을 완료한 후 브라우저를 닫으면 세션이 저장됩니다.
+이후 `download` 스크립트에서 동일한 `--user-data-dir`을 사용하여 로그인된 상태로 다운로드를 진행할 수 있습니다.
+
 ## 지원하는 링크
 
 - **Google Docs**: `.docx` 형식으로 다운로드
