@@ -5,22 +5,35 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { chromium, type BrowserContext, type Page } from 'playwright';
 
-const USER_DATA_DIR = path.join(process.cwd(), '.user_data');
-
 async function main() {
-  const args = process.argv.slice(2);
+  let args = process.argv.slice(2);
 
-  if (args.includes('--login')) {
-    if (args.length > 1) {
-      console.error('Error: --login option cannot be used with other arguments.');
-      process.exit(1);
+  // Check for npm config variable (if npm consumed the flag)
+  let userDataDir = process.env.npm_config_user_data_dir 
+    ? path.resolve(process.cwd(), process.env.npm_config_user_data_dir)
+    : path.join(process.cwd(), '.user_data');
+  
+  // Handle --user-data-dir argument (both space-separated and equals-separated)
+  const newArgs: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--user-data-dir') {
+      if (i + 1 >= args.length) {
+        console.error('Error: --user-data-dir option requires an argument.');
+        process.exit(1);
+      }
+      userDataDir = path.resolve(process.cwd(), args[i + 1]);
+      i++; // Skip next argument
+    } else if (arg.startsWith('--user-data-dir=')) {
+      userDataDir = path.resolve(process.cwd(), arg.substring('--user-data-dir='.length));
+    } else {
+      newArgs.push(arg);
     }
-    await handleLoginMode();
-    return;
   }
+  args = newArgs;
 
   if (args.length < 2) {
-    console.error('Usage: npm run download <url1> [url2 ... url10] <output_dir> [--login]');
+    console.error('Usage: npm run download <url1> [url2 ... url10] <output_dir> [--user-data-dir <dir>]');
     process.exit(1);
   }
 
@@ -38,14 +51,16 @@ async function main() {
   }
 
   console.log(`Launching browser...`);
-  console.log(`User Data Dir: ${USER_DATA_DIR}`);
+  console.log(`User Data Dir: ${userDataDir}`);
 
-  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+  const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     acceptDownloads: true,
     args: ['--start-maximized'],
     viewport: null,
   });
+
+  let loginPerformed = false;
 
   try {
     // --- Login Check Phase ---
@@ -63,47 +78,31 @@ async function main() {
       // Wait until we are redirected back to a google drive/docs domain
       await firstPage.waitForURL(/.*(drive|docs)\.google\.com.*/, { timeout: 0 });
       console.log('Login detected. Proceeding...');
+      loginPerformed = true;
     }
     
     await firstPage.close();
 
-    // --- Parallel Download Phase ---
-    console.log(`Starting downloads for ${targetUrls.length} URLs...`);
-    
-    const tasks = targetUrls.map(url => processUrl(context, url, outputDir));
-    await Promise.all(tasks);
-    
-    console.log('All downloads completed.');
+    if (loginPerformed) {
+      console.log('Login detected. Exiting with code 100.');
+    } else {
+      // --- Parallel Download Phase ---
+      console.log(`Starting downloads for ${targetUrls.length} URLs...`);
+      
+      const tasks = targetUrls.map(url => processUrl(context, url, outputDir));
+      await Promise.all(tasks);
+      
+      console.log('All downloads completed.');
+    }
 
   } catch (error) {
     console.error('An error occurred during execution:', error);
   } finally {
     console.log('Closing browser...');
     await context.close();
-  }
-}
-
-async function handleLoginMode() {
-  console.log(`Launching browser for login...`);
-  console.log(`User Data Dir: ${USER_DATA_DIR}`);
-
-  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
-    headless: false,
-    acceptDownloads: true,
-    args: ['--start-maximized'],
-    viewport: null,
-  });
-
-  try {
-    const page = context.pages()[0] || await context.newPage();
-    await page.goto('https://drive.google.com', { waitUntil: 'domcontentloaded' });
-
-    console.log('Waiting for login... Please log in manually in the browser.');
-    console.log('Press Enter in this terminal when you are ready to close...');
-    await new Promise(resolve => process.stdin.once('data', resolve));
-  } finally {
-    console.log('Closing browser...');
-    await context.close();
+    if (loginPerformed) {
+      process.exit(100);
+    }
   }
 }
 
